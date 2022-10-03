@@ -40,6 +40,12 @@ const minDepth = 16
 var homesteadReward = math.MustParseBig256("5000000000000000000")
 var disinflationRateQuotient = big.NewInt(4) // Disinflation rate quotient for ECIP1017
 var disinflationRateDivisor = big.NewInt(5)  // Disinflation rate divisor for ECIP1017
+
+// params for expanse
+const byzantiumHardForkHeight = 800000
+var homesteadExpanseReward = math.MustParseBig256("8000000000000000000")
+var byzantiumExpanseReward = math.MustParseBig256("4000000000000000000")
+
 // params for ethash
 var frontierBlockReward = big.NewInt(5e+18)
 var byzantiumBlockReward = big.NewInt(3e+18)
@@ -270,6 +276,13 @@ func (u *BlockUnlocker) handleBlock(block *rpc.GetBlockReply, candidate *storage
 		rewardForUncles := big.NewInt(0).Mul(uncleReward, big.NewInt(int64(len(block.Uncles))))
 		reward.Add(reward, rewardForUncles)
 
+	} else if u.config.Network == "expanse" {		
+		reward = getConstRewardExpanse(candidate.Height)
+		// Add reward for including uncles
+		uncleReward := new(big.Int).Div(reward, big32)
+		rewardForUncles := big.NewInt(0).Mul(uncleReward, big.NewInt(int64(len(block.Uncles))))
+		reward.Add(reward, rewardForUncles)
+
 	} else if u.config.Network == "callisto" {
 		reward = getConstRewardcallisto(candidate.Height)
 		// Add reward for including uncles
@@ -315,6 +328,8 @@ func handleUncle(height int64, uncle *rpc.GetBlockReply, candidate *storage.Bloc
 		reward = getUncleReward(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), era, getConstReward(era))
 	} else if cfg.Network == "ubiq" {
 		reward = getUncleRewardUbiq(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), getConstRewardUbiq(height))
+	} else if cfg.Network == "expanse" {
+		reward = getUncleRewardExpanse(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), getConstRewardExpanse(height))
 	} else if cfg.Network == "callisto" {
 		reward = getUncleRewardEthereum(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), getConstRewardcallisto(height))
 	} else if cfg.Network == "ethereum" || cfg.Network == "ropsten" {
@@ -702,8 +717,34 @@ func getConstRewardcallisto(height int64) *big.Int {
 	return calcBigNumber(38.88)
 }
 
+// expanse
+func getConstRewardExpanse(height int64) *big.Int {
+	if height >= byzantiumHardForkHeight {
+		return new(big.Int).Set(homesteadExpanseReward)
+	}
+	return new(big.Int).Set(byzantiumExpanseReward)
+}
+
+
 // ubqhash
 func getUncleRewardUbiq(uHeight *big.Int, height *big.Int, reward *big.Int) *big.Int {
+
+	r := new(big.Int)
+
+	r.Add(uHeight, big2)
+	r.Sub(r, height)
+	r.Mul(r, reward)
+	r.Div(r, big2)
+	if r.Cmp(big.NewInt(0)) < 0 {
+		// blocks older than the previous block are not rewarded
+		r = big.NewInt(0)
+	}
+
+	return r
+}
+
+// expanse
+func getUncleRewardExpanse(uHeight *big.Int, height *big.Int, reward *big.Int) *big.Int {
 
 	r := new(big.Int)
 
